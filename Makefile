@@ -6,7 +6,7 @@ all: build
 
 build:
 	go build
-	mv $(NAME) GoHandler.app/Contents/Resources/Scripts/
+	mv $(NAME) GoHandler.app/Contents/MacOS/bin
 
 clean:
 	-rm $(NAME)

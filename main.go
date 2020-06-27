@@ -13,6 +13,7 @@ import (
 const (
 	schemeName  = "go"
 	journalPath = "/Dropbox/org/journal/"
+	emacsclient = "/usr/local/bin/emacsclient"
 )
 
 func main() {
@@ -63,7 +64,7 @@ func openJournalEditor(path string) error {
 	if _, err := os.Stat(filename); err != nil {
 		return err
 	}
-	cmd := exec.Command("emacsclient", "-qn", filename)
+	cmd := exec.Command(emacsclient, "-qn", filename)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, string(out))
