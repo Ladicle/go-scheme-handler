@@ -1,0 +1,4 @@
+* Go Scheme Handler
+
+Handling =go://= scheme on macOS.
+
