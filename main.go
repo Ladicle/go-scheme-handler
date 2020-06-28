@@ -32,14 +32,14 @@ type Handler struct {
 
 func (h *Handler) validation(args []string) error {
 	if len(args) == 0 {
-		return errors.New("URI is required arguments")
+		return errors.New("URL is required arguments")
 	}
 	u, err := url.Parse(args[0])
 	if err != nil {
 		return err
 	}
 	if u.Scheme != schemeName {
-		return fmt.Errorf("%q is unexpected URI scheme: %+v", u.Scheme, *u)
+		return fmt.Errorf("%q is unexpected URL scheme", u.Scheme)
 	}
 	h.url = u
 	return nil
