@@ -26,8 +26,8 @@ func main() {
 	}
 	mapper.Register("journal", JournalHandler{
 		baseDir:    filepath.Join(home, "/Dropbox/org/journal/"),
-		editorPath: "/usr/local/bin/emacsclient",
-		editorOpt:  "-qn",
+		editorCmd:  "/usr/local/bin/emacsclient",
+		editorOpts: []string{"--no-wait", "--quiet"},
 	})
 
 	if err := mapper.Dispatch(u.Host, u.Path, u.Query()); err != nil {
@@ -83,8 +83,8 @@ var _ ServiceHandler = JournalHandler{}
 // format: go://journal/<name>?title=<title>
 type JournalHandler struct {
 	baseDir    string
-	editorPath string
-	editorOpt  string
+	editorCmd  string
+	editorOpts []string
 }
 
 func (h JournalHandler) Handle(path string, params url.Values) error {
@@ -95,7 +95,10 @@ func (h JournalHandler) Handle(path string, params url.Values) error {
 
 	// TODO: search header line
 
-	cmd := exec.Command(h.editorPath, h.editorOpt, filename)
+	args := append([]string{}, h.editorOpts...)
+	args = append(args, filename)
+
+	cmd := exec.Command(h.editorCmd, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, string(out))
