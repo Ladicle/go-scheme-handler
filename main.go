@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -89,14 +91,22 @@ type JournalHandler struct {
 
 func (h JournalHandler) Handle(path string, params url.Values) error {
 	filename := filepath.Join(h.baseDir, fmt.Sprintf("%s.org", path))
-	if _, err := os.Stat(filename); err != nil {
-		return err
+
+	var line int
+	t, ok := params["title"]
+	if ok && len(t) > 0 {
+		l, err := findHeaderLine(filename, []byte(t[0]))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("WARNING: %v", err))
+		} else {
+			line = l
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "WARNING: request parameter does not contain title")
 	}
 
-	// TODO: search header line
-
 	args := append([]string{}, h.editorOpts...)
-	args = append(args, filename)
+	args = append(args, fmt.Sprintf("+%d", line), filename)
 
 	cmd := exec.Command(h.editorCmd, args...)
 	out, err := cmd.CombinedOutput()
@@ -105,4 +115,28 @@ func (h JournalHandler) Handle(path string, params url.Values) error {
 		return err
 	}
 	return nil
+}
+
+var orgHeaderPrefix = []byte("*")
+
+func findHeaderLine(filename string, header []byte) (int, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return 0, err
+	}
+
+	scanner := bufio.NewScanner(f)
+	for line := 1; scanner.Scan(); line++ {
+		if !bytes.HasPrefix(scanner.Bytes(), orgHeaderPrefix) {
+			continue
+		}
+		if bytes.Contains(scanner.Bytes(), header) {
+			return line, nil
+		}
+	}
+	return 0, fmt.Errorf("failed to find %q header", header)
+}
+
+func isOrgHeader() bool {
+	return false
 }
