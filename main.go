@@ -10,61 +10,92 @@ import (
 	"path/filepath"
 )
 
-const (
-	schemeName  = "go"
-	journalPath = "/Dropbox/org/journal/"
-	emacsclient = "/usr/local/bin/emacsclient"
-)
+const schemeName = "go"
 
 func main() {
-	h := Handler{}
-	if err := h.validation(os.Args[1:]); err != nil {
+	u, err := validation(os.Args[1:])
+	if err != nil {
 		log.Fatalln(err)
 	}
-	if err := h.handle(); err != nil {
+
+	mapper := NewServiceMapper()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	mapper.Register("journal", JournalHandler{
+		baseDir:    filepath.Join(home, "/Dropbox/org/journal/"),
+		editorPath: "/usr/local/bin/emacsclient",
+		editorOpt:  "-qn",
+	})
+
+	if err := mapper.Dispatch(u.Host, u.Path, u.Query()); err != nil {
 		log.Fatalln(err)
 	}
 }
 
-type Handler struct {
-	url *url.URL
-}
-
-func (h *Handler) validation(args []string) error {
+func validation(args []string) (*url.URL, error) {
 	if len(args) == 0 {
-		return errors.New("URL is required arguments")
+		return nil, errors.New("URL is required arguments")
 	}
 	u, err := url.Parse(args[0])
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if u.Scheme != schemeName {
-		return fmt.Errorf("%q is unexpected URL scheme", u.Scheme)
+		return nil, fmt.Errorf("%q is unexpected URL scheme", u.Scheme)
 	}
-	h.url = u
-	return nil
+	return u, nil
 }
 
-func (h *Handler) handle() error {
-	switch h.url.Host {
-	// "journal/<filename>"
-	case "journal":
-		return openJournalEditor(h.url.Path)
-	default:
-		return fmt.Errorf("%q is unknown hostname", h.url.Host)
+func NewServiceMapper() *ServiceMapper {
+	return &ServiceMapper{
+		maps: make(map[string]ServiceHandler),
 	}
 }
 
-func openJournalEditor(path string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
+// ServiceMapper maps service name and handler.
+type ServiceMapper struct {
+	maps map[string]ServiceHandler
+}
+
+func (m *ServiceMapper) Register(name string, handler ServiceHandler) {
+	m.maps[name] = handler
+}
+
+func (m *ServiceMapper) Dispatch(service, path string, params url.Values) error {
+	h, ok := m.maps[service]
+	if !ok {
+		return fmt.Errorf("%q is unknown service", service)
 	}
-	filename := filepath.Join(home, journalPath, fmt.Sprintf("%s.org", path))
+	return h.Handle(path, params)
+}
+
+// ServiceHandler handles requests to service.
+type ServiceHandler interface {
+	Handle(path string, params url.Values) error
+}
+
+var _ ServiceHandler = JournalHandler{}
+
+// JournalHandler handles journal service.
+// format: go://journal/<name>?title=<title>
+type JournalHandler struct {
+	baseDir    string
+	editorPath string
+	editorOpt  string
+}
+
+func (h JournalHandler) Handle(path string, params url.Values) error {
+	filename := filepath.Join(h.baseDir, fmt.Sprintf("%s.org", path))
 	if _, err := os.Stat(filename); err != nil {
 		return err
 	}
-	cmd := exec.Command(emacsclient, "-qn", filename)
+
+	// TODO: search header line
+
+	cmd := exec.Command(h.editorPath, h.editorOpt, filename)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, string(out))
