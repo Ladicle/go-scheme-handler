@@ -26,10 +26,18 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	mapper.Register("journal", JournalHandler{
-		baseDir:    filepath.Join(home, "/Dropbox/org/journal/"),
+
+	editor := EditorOptions{
 		editorCmd:  "/usr/local/bin/emacsclient",
 		editorOpts: []string{"--no-wait", "--quiet"},
+	}
+	mapper.Register("journal", JournalHandler{
+		baseDir:       filepath.Join(home, "/Dropbox/org/journal/"),
+		EditorOptions: editor,
+	})
+	mapper.Register("book", BookHandler{
+		bookFile:      filepath.Join(home, "/Dropbox/org/book.org"),
+		EditorOptions: editor,
 	})
 
 	if err := mapper.Dispatch(u.Host, u.Path, u.Query()); err != nil {
@@ -74,6 +82,25 @@ func (m *ServiceMapper) Dispatch(service, path string, params url.Values) error 
 	return h.Handle(path, params)
 }
 
+// EditorOptions is options for editor
+type EditorOptions struct {
+	editorCmd  string
+	editorOpts []string
+}
+
+func (e *EditorOptions) OpenFileWithLine(filename string, line int) error {
+	args := append([]string{}, e.editorOpts...)
+	args = append(args, fmt.Sprintf("+%d", line), filename)
+
+	cmd := exec.Command(e.editorCmd, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, string(out))
+		return err
+	}
+	return nil
+}
+
 // ServiceHandler handles requests to service.
 type ServiceHandler interface {
 	Handle(path string, params url.Values) error
@@ -84,9 +111,8 @@ var _ ServiceHandler = JournalHandler{}
 // JournalHandler handles journal service.
 // format: go://journal/<name>?title=<title>
 type JournalHandler struct {
-	baseDir    string
-	editorCmd  string
-	editorOpts []string
+	EditorOptions
+	baseDir string
 }
 
 func (h JournalHandler) Handle(path string, params url.Values) error {
@@ -105,16 +131,24 @@ func (h JournalHandler) Handle(path string, params url.Values) error {
 		fmt.Fprintln(os.Stderr, "WARNING: request parameter does not contain title")
 	}
 
-	args := append([]string{}, h.editorOpts...)
-	args = append(args, fmt.Sprintf("+%d", line), filename)
+	return h.OpenFileWithLine(filename, line)
+}
 
-	cmd := exec.Command(h.editorCmd, args...)
-	out, err := cmd.CombinedOutput()
+var _ ServiceHandler = BookHandler{}
+
+// BookHandler handles book service.
+// format: go://book/<title>
+type BookHandler struct {
+	EditorOptions
+	bookFile string
+}
+
+func (h BookHandler) Handle(path string, params url.Values) error {
+	line, err := findHeaderLine(h.bookFile, []byte(path))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, string(out))
-		return err
+		fmt.Fprintln(os.Stderr, fmt.Sprintf("WARNING: %v", err))
 	}
-	return nil
+	return h.OpenFileWithLine(h.bookFile, line)
 }
 
 var orgHeaderPrefix = []byte("*")
