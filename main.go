@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const schemeName = "go"
@@ -36,7 +37,7 @@ func main() {
 		EditorOptions: editor,
 	})
 	mapper.Register("book", BookHandler{
-		bookFile:      filepath.Join(home, "/Dropbox/org/book.org"),
+		bookFile:      filepath.Join(home, "/Dropbox/org/books.org"),
 		EditorOptions: editor,
 	})
 
@@ -121,7 +122,7 @@ func (h JournalHandler) Handle(path string, params url.Values) error {
 	var line int
 	t, ok := params["title"]
 	if ok && len(t) > 0 {
-		l, err := findHeaderLine(filename, []byte(t[0]))
+		l, err := findHeaderLine(filename, []byte(t[0]), orgHeaderPrefix)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, fmt.Sprintf("WARNING: %v", err))
 		} else {
@@ -144,16 +145,20 @@ type BookHandler struct {
 }
 
 func (h BookHandler) Handle(path string, params url.Values) error {
-	line, err := findHeaderLine(h.bookFile, []byte(path))
+	name := []byte(strings.TrimPrefix(path, "/"))
+	line, err := findHeaderLine(h.bookFile, name, filePropPrefix)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, fmt.Sprintf("WARNING: %v", err))
 	}
 	return h.OpenFileWithLine(h.bookFile, line)
 }
 
-var orgHeaderPrefix = []byte("*")
+var (
+	orgHeaderPrefix = []byte("*")
+	filePropPrefix  = []byte(":EXPORT_FILE_NAME:")
+)
 
-func findHeaderLine(filename string, header []byte) (int, error) {
+func findHeaderLine(filename string, header, prefix []byte) (int, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return 0, err
@@ -161,7 +166,7 @@ func findHeaderLine(filename string, header []byte) (int, error) {
 
 	scanner := bufio.NewScanner(f)
 	for line := 1; scanner.Scan(); line++ {
-		if !bytes.HasPrefix(scanner.Bytes(), orgHeaderPrefix) {
+		if !bytes.HasPrefix(scanner.Bytes(), prefix) {
 			continue
 		}
 		if bytes.Contains(scanner.Bytes(), header) {
